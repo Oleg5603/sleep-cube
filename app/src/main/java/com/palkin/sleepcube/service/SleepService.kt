@@ -3,7 +3,9 @@ package com.palkin.sleepcube.service
 import android.app.*
 import android.content.Intent
 import android.os.Binder
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import com.palkin.sleepcube.MainActivity
 import com.palkin.sleepcube.R
@@ -18,6 +20,12 @@ class SleepService : Service() {
 
     val audioEngine = AudioEngine()
     private val binder = SleepBinder()
+    private val handler = Handler(Looper.getMainLooper())
+    private val stopRunnable = Runnable {
+        audioEngine.stop()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
 
     companion object {
         const val CHANNEL_ID = "sleep_cube_ch"
@@ -26,6 +34,7 @@ class SleepService : Service() {
         const val ACTION_STOP = "STOP"
         const val EXTRA_MODE = "MODE"
         const val EXTRA_NOISE = "NOISE"
+        const val EXTRA_DURATION_MIN = "DURATION_MIN"
     }
 
     override fun onCreate() {
@@ -43,10 +52,17 @@ class SleepService : Service() {
                     intent.getStringExtra(EXTRA_MODE) ?: SleepMode.DEEP_SLEEP.name
                 )
                 val noise = intent.getBooleanExtra(EXTRA_NOISE, false)
-                startForeground(NOTIF_ID, buildNotification(mode.label))
+                val durationMin = intent.getIntExtra(EXTRA_DURATION_MIN, -1)
+                val durationLabel = if (durationMin > 0) " · ${formatDuration(durationMin)}" else ""
+                startForeground(NOTIF_ID, buildNotification(mode.label + durationLabel))
                 audioEngine.start(mode, noise)
+                handler.removeCallbacks(stopRunnable)
+                if (durationMin > 0) {
+                    handler.postDelayed(stopRunnable, durationMin * 60_000L)
+                }
             }
             ACTION_STOP -> {
+                handler.removeCallbacks(stopRunnable)
                 audioEngine.stop()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
@@ -58,8 +74,19 @@ class SleepService : Service() {
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onDestroy() {
+        handler.removeCallbacks(stopRunnable)
         audioEngine.release()
         super.onDestroy()
+    }
+
+    private fun formatDuration(minutes: Int): String {
+        val h = minutes / 60
+        val m = minutes % 60
+        return when {
+            h > 0 && m > 0 -> "${h}ч ${m}м"
+            h > 0 -> "${h}ч"
+            else -> "${m}м"
+        }
     }
 
     private fun buildNotification(modeLabel: String): Notification {

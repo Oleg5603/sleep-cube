@@ -9,8 +9,21 @@ import kotlin.math.sin
 
 enum class SleepMode(val beatFreq: Float, val label: String) {
     DEEP_SLEEP(2f, "Глубокий сон"),
+    NAP(10f, "Вздремнуть"),
     VIVID_DREAMS(6f, "Яркие сны"),
     WAKE_UP(40f, "Пробуждение"),
+}
+
+/** Длительность сессии. null = бесконечно. */
+enum class SessionDuration(val minutes: Int?, val label: String) {
+    MIN_20(20, "20 мин"),
+    MIN_30(30, "30 мин"),
+    MIN_45(45, "45 мин"),
+    HOUR_1(60, "1 ч"),
+    HOUR_2(120, "2 ч"),
+    HOUR_4(240, "4 ч"),
+    HOUR_8(480, "8 ч"),
+    INFINITE(null, "∞"),
 }
 
 class AudioEngine {

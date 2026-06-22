@@ -40,12 +40,28 @@ class MainActivity : ComponentActivity() {
                 var elapsed by remember { mutableLongStateOf(0L) }
                 var mainVol by remember { mutableFloatStateOf(0.5f) }
                 var noiseVol by remember { mutableFloatStateOf(0.25f) }
+                var durationMin by remember { mutableIntStateOf(0) } // 0 = ∞
 
+                // Таймер
                 LaunchedEffect(isPlaying) {
                     if (isPlaying) {
                         while (isActive) { delay(1000); elapsed++ }
                     } else {
                         elapsed = 0L
+                    }
+                }
+
+                // Авто-стоп по таймеру (UI-сторона)
+                LaunchedEffect(isPlaying, durationMin) {
+                    if (isPlaying && durationMin > 0) {
+                        val totalSec = durationMin * 60L
+                        while (isActive) {
+                            delay(500)
+                            if (elapsed >= totalSec) {
+                                isPlaying = false
+                                break
+                            }
+                        }
                     }
                 }
 
@@ -56,15 +72,17 @@ class MainActivity : ComponentActivity() {
                     isPlaying = isPlaying,
                     selectedMode = mode,
                     elapsedSeconds = elapsed,
+                    durationMinutes = durationMin,
                     noiseEnabled = noiseEnabled,
                     mainVolume = mainVol,
                     noiseVolume = noiseVol,
                     onModeSelected = { mode = it },
+                    onDurationChange = { durationMin = it },
                     onStartStop = {
                         if (isPlaying) {
                             stopSession(); isPlaying = false
                         } else {
-                            startSession(mode, noiseEnabled); isPlaying = true
+                            startSession(mode, noiseEnabled, durationMin); isPlaying = true
                         }
                     },
                     onNoiseToggle = { noiseEnabled = it },
@@ -75,11 +93,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun startSession(mode: SleepMode, noise: Boolean) {
+    private fun startSession(mode: SleepMode, noise: Boolean, durationMin: Int) {
         val intent = Intent(this, SleepService::class.java).apply {
             action = SleepService.ACTION_START
             putExtra(SleepService.EXTRA_MODE, mode.name)
             putExtra(SleepService.EXTRA_NOISE, noise)
+            if (durationMin > 0) putExtra(SleepService.EXTRA_DURATION_MIN, durationMin)
         }
         startForegroundService(intent)
         bindService(intent, conn, BIND_AUTO_CREATE)
