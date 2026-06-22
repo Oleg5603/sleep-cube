@@ -3,6 +3,7 @@ package com.palkin.sleepcube.audio
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import android.os.Process
 import kotlinx.coroutines.*
 import kotlin.math.PI
 import kotlin.math.abs
@@ -31,7 +32,7 @@ enum class SessionDuration(val minutes: Int?, val label: String) {
 class AudioEngine {
     private val sampleRate = 44100
     private val baseFreq = 200f
-    private val framesPerBuffer = 4096
+    private val framesPerBuffer = 8192   // увеличен для защиты от underrun
 
     private var binauralTrack: AudioTrack? = null
     private var noiseTrack: AudioTrack? = null
@@ -63,16 +64,16 @@ class AudioEngine {
         startSmoothTransition()
     }
 
-    /** Плавно сдвигает beatFreq к targetBeatFreq со скоростью 0.3 Гц/сек. */
+    /** Плавно сдвигает beatFreq к targetBeatFreq со скоростью ~0.2 Гц/сек. */
     private fun startSmoothTransition() {
-        scope.launch {
+        scope.launch(Dispatchers.Default) {
             while (isActive) {
-                delay(100)
+                delay(500)   // 2 раза в секунду, не мешает аудио-потоку
                 val target = targetBeatFreq
                 val current = beatFreq
                 val diff = target - current
                 if (abs(diff) > 0.01f) {
-                    beatFreq = current + diff.coerceIn(-0.03f, 0.03f)
+                    beatFreq = current + diff.coerceIn(-0.1f, 0.1f)
                 }
             }
         }
@@ -100,7 +101,9 @@ class AudioEngine {
 
         binauralTrack?.play()
 
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
+            // Высший приоритет для аудио-потока — предотвращает треск
+            Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
             val buf = ShortArray(framesPerBuffer * 2)
             var frame = 0L
             while (isActive) {
@@ -144,8 +147,9 @@ class AudioEngine {
 
         noiseTrack?.play()
 
-        scope.launch {
-            val buf = ShortArray(2048)
+        scope.launch(Dispatchers.IO) {
+            Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
+            val buf = ShortArray(4096)
             val rng = java.util.Random()
             var b0 = 0.0; var b1 = 0.0; var b2 = 0.0
             var b3 = 0.0; var b4 = 0.0; var b5 = 0.0; var b6 = 0.0
