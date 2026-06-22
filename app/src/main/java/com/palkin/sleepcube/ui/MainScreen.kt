@@ -26,10 +26,14 @@ fun MainScreen(
     isPlaying: Boolean,
     selectedMode: SleepMode,
     elapsedSeconds: Long,
-    durationMinutes: Int,           // 0 = бесконечно
+    durationMinutes: Int,
     noiseEnabled: Boolean,
     mainVolume: Float,
     noiseVolume: Float,
+    phaseName: String,
+    phaseStage: String,
+    phaseCycle: Int,
+    currentFreq: Float,
     onModeSelected: (SleepMode) -> Unit,
     onStartStop: () -> Unit,
     onDurationChange: (Int) -> Unit,
@@ -37,11 +41,11 @@ fun MainScreen(
     onMainVolumeChange: (Float) -> Unit,
     onNoiseVolumeChange: (Float) -> Unit,
 ) {
-    val bg = Color(0xFF0D0D2B)
-    val cardBg = Color(0xFF141430)
+    val bg          = Color(0xFF0D0D2B)
+    val cardBg      = Color(0xFF141430)
     val textPrimary = Color(0xFFE0E0FF)
-    val textSecondary = Color(0xFF8888AA)
-    val accent = Color(0xFF7B7BFF)
+    val textSec     = Color(0xFF8888AA)
+    val accent      = Color(0xFF7B7BFF)
 
     Column(
         modifier = Modifier
@@ -52,49 +56,57 @@ fun MainScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.height(48.dp))
-
         Text("Кубик Сна", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = textPrimary)
-        Text("Бинауральные ритмы", fontSize = 14.sp, color = textSecondary)
+        Text("Бинауральные ритмы", fontSize = 14.sp, color = textSec)
 
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(24.dp))
 
-        // ── Режим ──────────────────────────────────────────────────────────
-        SectionLabel("Режим", textSecondary)
-        Spacer(Modifier.height(8.dp))
-
-        SleepMode.entries.forEach { mode ->
-            ModeCard(
-                mode = mode,
-                isSelected = selectedMode == mode,
-                enabled = !isPlaying,
-                cardBg = cardBg,
-                accent = accent,
+        // ── Карточка текущей фазы (Умный сон) ─────────────────────────────
+        if (isPlaying && selectedMode == SleepMode.SMART_SLEEP && phaseName.isNotEmpty()) {
+            PhaseCard(
+                phaseName  = phaseName,
+                phaseStage = phaseStage,
+                cycle      = phaseCycle,
+                freq       = currentFreq,
+                accent     = accent,
+                cardBg     = cardBg,
                 textPrimary = textPrimary,
-                textSecondary = textSecondary,
-                onClick = { onModeSelected(mode) },
+                textSec    = textSec,
+            )
+            Spacer(Modifier.height(16.dp))
+        }
+
+        // ── Режим ─────────────────────────────────────────────────────────
+        SectionLabel("Режим", textSec)
+        Spacer(Modifier.height(8.dp))
+        SleepMode.entries.forEach { m ->
+            ModeCard(
+                mode       = m,
+                isSelected = selectedMode == m,
+                enabled    = !isPlaying,
+                cardBg     = cardBg, accent = accent,
+                textPrimary = textPrimary, textSec = textSec,
+                onClick    = { onModeSelected(m) },
             )
             Spacer(Modifier.height(8.dp))
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(8.dp))
 
-        // ── Длительность ────────────────────────────────────────────────────
-        SectionLabel("Длительность сна", textSecondary)
-        Spacer(Modifier.height(12.dp))
-
+        // ── Длительность ──────────────────────────────────────────────────
+        SectionLabel("Длительность", textSec)
+        Spacer(Modifier.height(8.dp))
         DurationPicker(
-            minutes = durationMinutes,
-            enabled = !isPlaying,
-            cardBg = cardBg,
-            textPrimary = textPrimary,
-            textSecondary = textSecondary,
-            accent = accent,
+            minutes    = durationMinutes,
+            enabled    = !isPlaying,
+            cardBg     = cardBg, accent = accent,
+            textPrimary = textPrimary, textSec = textSec,
             onValueChange = onDurationChange,
         )
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
 
-        // ── Розовый шум ─────────────────────────────────────────────────────
+        // ── Розовый шум ───────────────────────────────────────────────────
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
@@ -102,49 +114,39 @@ fun MainScreen(
         ) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Розовый шум", color = textPrimary, modifier = Modifier.weight(1f))
-                Switch(
-                    checked = noiseEnabled,
-                    onCheckedChange = onNoiseToggle,
-                    enabled = !isPlaying,
-                )
+                Switch(checked = noiseEnabled, onCheckedChange = onNoiseToggle, enabled = !isPlaying)
             }
         }
 
-        Spacer(Modifier.height(16.dp))
-
-        // ── Громкость ────────────────────────────────────────────────────────
-        VolumeSlider("Громкость ритмов", mainVolume, textSecondary, accent, onMainVolumeChange)
         Spacer(Modifier.height(12.dp))
+
+        VolumeSlider("Громкость ритмов", mainVolume,  textSec, accent, onMainVolumeChange)
         if (noiseEnabled) {
-            VolumeSlider("Громкость шума", noiseVolume, textSecondary, accent, onNoiseVolumeChange)
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
+            VolumeSlider("Громкость шума", noiseVolume, textSec, accent, onNoiseVolumeChange)
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(20.dp))
 
-        // ── Таймер ──────────────────────────────────────────────────────────
+        // ── Таймер ────────────────────────────────────────────────────────
         if (isPlaying) {
             val remaining = if (durationMinutes > 0) {
-                val rem = durationMinutes * 60L - elapsedSeconds
-                if (rem > 0) rem else 0L
+                val r = durationMinutes * 60L - elapsedSeconds
+                if (r > 0) r else 0L
             } else null
 
             Text(
                 if (remaining != null) formatTime(remaining) else formatTime(elapsedSeconds),
-                fontSize = 52.sp,
-                fontWeight = FontWeight.Thin,
-                color = accent,
+                fontSize = 52.sp, fontWeight = FontWeight.Thin, color = accent,
             )
             Text(
-                if (remaining != null) "осталось · ${selectedMode.beatFreq} Гц"
-                else "прошло · ${selectedMode.beatFreq} Гц",
-                fontSize = 13.sp,
-                color = textSecondary,
+                if (remaining != null) "осталось" else "прошло",
+                fontSize = 13.sp, color = textSec,
             )
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(20.dp))
         }
 
-        // ── Кнопка ──────────────────────────────────────────────────────────
+        // ── Кнопка ────────────────────────────────────────────────────────
         Button(
             onClick = onStartStop,
             modifier = Modifier.size(100.dp),
@@ -154,129 +156,83 @@ fun MainScreen(
             ),
             elevation = ButtonDefaults.buttonElevation(6.dp),
         ) {
-            Text(
-                if (isPlaying) "⏹" else "▶",
-                fontSize = 36.sp,
-                textAlign = TextAlign.Center,
-            )
+            Text(if (isPlaying) "⏹" else "▶", fontSize = 36.sp, textAlign = TextAlign.Center)
         }
         Spacer(Modifier.height(6.dp))
-        Text(
-            if (isPlaying) "Остановить" else "Начать",
-            color = textSecondary,
-            fontSize = 13.sp,
-        )
+        Text(if (isPlaying) "Остановить" else "Начать", color = textSec, fontSize = 13.sp)
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(20.dp))
         Text(
             "Для бинауральных ритмов нужны стереонаушники",
-            fontSize = 11.sp,
-            color = Color(0xFF555577),
-            textAlign = TextAlign.Center,
+            fontSize = 11.sp, color = Color(0xFF555577), textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(32.dp))
     }
 }
 
-// ── Выбор длительности: ползунок + поле ввода ──────────────────────────────
+// ── Карточка текущей фазы ─────────────────────────────────────────────────
 
 @Composable
-private fun DurationPicker(
-    minutes: Int,
-    enabled: Boolean,
-    cardBg: Color,
-    textPrimary: Color,
-    textSecondary: Color,
-    accent: Color,
-    onValueChange: (Int) -> Unit,
+private fun PhaseCard(
+    phaseName: String, phaseStage: String, cycle: Int, freq: Float,
+    accent: Color, cardBg: Color, textPrimary: Color, textSec: Color,
 ) {
-    // Ползунок: 0..480 мин (0 = ∞), шаг 5 мин
-    val maxMinutes = 480f
-    var textInput by remember(minutes) {
-        mutableStateOf(if (minutes == 0) "" else minutes.toString())
+    val stageColor = when (phaseStage) {
+        "N3"  -> Color(0xFF4488FF)
+        "REM" -> Color(0xFFAA66FF)
+        "N1"  -> Color(0xFF66AAFF)
+        else  -> accent
     }
-
+    val stageEmoji = when (phaseStage) {
+        "N3"  -> "💤"
+        "REM" -> "✨"
+        "N1"  -> "😴"
+        else  -> "🌙"
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = cardBg),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF0E0E30)),
+        border = BorderStroke(1.dp, stageColor.copy(alpha = 0.6f)),
     ) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(stageEmoji, fontSize = 32.sp)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(phaseName, color = textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 Text(
-                    if (minutes == 0) "∞  без ограничения" else formatDurationLabel(minutes),
-                    color = textPrimary,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.weight(1f),
-                )
-                // Поле ввода минут
-                OutlinedTextField(
-                    value = textInput,
-                    onValueChange = { v ->
-                        textInput = v.filter { it.isDigit() }.take(3)
-                        val num = textInput.toIntOrNull() ?: 0
-                        onValueChange(num.coerceIn(0, 480))
-                    },
-                    enabled = enabled,
-                    label = { Text("мин", fontSize = 11.sp, color = textSecondary) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.width(90.dp),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = accent,
-                        unfocusedBorderColor = textSecondary,
-                        focusedTextColor = textPrimary,
-                        unfocusedTextColor = textPrimary,
-                    ),
+                    "Стадия $phaseStage · Цикл $cycle",
+                    color = textSec, fontSize = 12.sp,
                 )
             }
-
-            Spacer(Modifier.height(8.dp))
-
-            Slider(
-                value = minutes.toFloat(),
-                onValueChange = { v ->
-                    val snapped = (v / 5).roundToInt() * 5
-                    onValueChange(snapped)
-                    textInput = if (snapped == 0) "" else snapped.toString()
-                },
-                valueRange = 0f..maxMinutes,
-                steps = (maxMinutes / 5).toInt() - 1,
-                enabled = enabled,
-                modifier = Modifier.fillMaxWidth(),
-                colors = SliderDefaults.colors(thumbColor = accent, activeTrackColor = accent),
-            )
-
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("∞", color = textSecondary, fontSize = 11.sp)
-                Text("30м", color = textSecondary, fontSize = 11.sp)
-                Text("2ч", color = textSecondary, fontSize = 11.sp)
-                Text("4ч", color = textSecondary, fontSize = 11.sp)
-                Text("8ч", color = textSecondary, fontSize = 11.sp)
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    "%.1f Гц".format(freq),
+                    color = stageColor, fontWeight = FontWeight.Bold, fontSize = 18.sp,
+                )
+                Text("бинаур.", color = textSec, fontSize = 10.sp)
             }
         }
     }
 }
 
-// ── Карточка режима ────────────────────────────────────────────────────────
+// ── Карточка режима ──────────────────────────────────────────────────────
 
 @Composable
 private fun ModeCard(
-    mode: SleepMode,
-    isSelected: Boolean,
-    enabled: Boolean,
-    cardBg: Color,
-    accent: Color,
-    textPrimary: Color,
-    textSecondary: Color,
+    mode: SleepMode, isSelected: Boolean, enabled: Boolean,
+    cardBg: Color, accent: Color, textPrimary: Color, textSec: Color,
     onClick: () -> Unit,
 ) {
-    val (emoji, desc, range) = when (mode) {
-        SleepMode.DEEP_SLEEP -> Triple("💤", "Дельта-волны, глубокий сон", "2 Гц")
-        SleepMode.NAP        -> Triple("😴", "Альфа-ритмы, короткий отдых", "10 Гц")
-        SleepMode.VIVID_DREAMS -> Triple("✨", "Тета-ритмы, яркие сновидения", "6 Гц")
-        SleepMode.WAKE_UP    -> Triple("☀️", "Гамма-ритмы, мягкое пробуждение", "40 Гц")
+    val (emoji, desc, rangeLabel) = when (mode) {
+        SleepMode.SMART_SLEEP  -> Triple("🧠", "5 циклов · авто N1→N2→N3→REM", "авто")
+        SleepMode.DEEP_SLEEP   -> Triple("💤", "Дельта-волны, глубокий сон",    "2 Гц")
+        SleepMode.NAP          -> Triple("😴", "Альфа-ритмы, короткий отдых",   "10 Гц")
+        SleepMode.VIVID_DREAMS -> Triple("✨", "Тета-ритмы, яркие сновидения",  "6 Гц")
+        SleepMode.WAKE_UP      -> Triple("☀️", "Гамма-ритмы, мягкое пробуждение","40 Гц")
     }
     Card(
         onClick = { if (enabled) onClick() },
@@ -292,9 +248,76 @@ private fun ModeCard(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(mode.label, color = textPrimary, fontWeight = FontWeight.Medium, fontSize = 15.sp)
-                Text(desc, color = textSecondary, fontSize = 12.sp)
+                Text(desc, color = textSec, fontSize = 12.sp)
             }
-            Text(range, color = accent, fontSize = 12.sp)
+            Text(rangeLabel, color = accent, fontSize = 12.sp)
+        }
+    }
+}
+
+// ── Выбор длительности ───────────────────────────────────────────────────
+
+@Composable
+private fun DurationPicker(
+    minutes: Int, enabled: Boolean,
+    cardBg: Color, accent: Color, textPrimary: Color, textSec: Color,
+    onValueChange: (Int) -> Unit,
+) {
+    var textInput by remember(minutes) {
+        mutableStateOf(if (minutes == 0) "" else minutes.toString())
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBg),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (minutes == 0) "∞  без ограничения" else fmtDurationLabel(minutes),
+                    color = textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                    value = textInput,
+                    onValueChange = { v ->
+                        textInput = v.filter { it.isDigit() }.take(3)
+                        onValueChange((textInput.toIntOrNull() ?: 0).coerceIn(0, 480))
+                    },
+                    enabled = enabled,
+                    label = { Text("мин", fontSize = 11.sp) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.width(90.dp),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = accent,
+                        unfocusedBorderColor = textSec,
+                        focusedTextColor = textPrimary,
+                        unfocusedTextColor = textPrimary,
+                    ),
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Slider(
+                value = minutes.toFloat(),
+                onValueChange = { v ->
+                    val s = (v / 5).roundToInt() * 5
+                    onValueChange(s)
+                    textInput = if (s == 0) "" else s.toString()
+                },
+                valueRange = 0f..480f,
+                steps = 95,
+                enabled = enabled,
+                modifier = Modifier.fillMaxWidth(),
+                colors = SliderDefaults.colors(thumbColor = accent, activeTrackColor = accent),
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("∞", color = textSec, fontSize = 11.sp)
+                Text("30м", color = textSec, fontSize = 11.sp)
+                Text("2ч", color = textSec, fontSize = 11.sp)
+                Text("4ч", color = textSec, fontSize = 11.sp)
+                Text("8ч", color = textSec, fontSize = 11.sp)
+            }
         }
     }
 }
@@ -305,18 +328,11 @@ private fun SectionLabel(text: String, color: Color) {
 }
 
 @Composable
-private fun VolumeSlider(
-    label: String,
-    value: Float,
-    textColor: Color,
-    accent: Color,
-    onValueChange: (Float) -> Unit,
-) {
+private fun VolumeSlider(label: String, value: Float, textColor: Color, accent: Color, onChange: (Float) -> Unit) {
     Column(Modifier.fillMaxWidth()) {
         Text(label, color = textColor, fontSize = 12.sp)
         Slider(
-            value = value,
-            onValueChange = onValueChange,
+            value = value, onValueChange = onChange,
             modifier = Modifier.fillMaxWidth(),
             colors = SliderDefaults.colors(thumbColor = accent, activeTrackColor = accent),
         )
@@ -324,18 +340,11 @@ private fun VolumeSlider(
 }
 
 private fun formatTime(seconds: Long): String {
-    val h = seconds / 3600
-    val m = (seconds % 3600) / 60
-    val s = seconds % 60
+    val h = seconds / 3600; val m = (seconds % 3600) / 60; val s = seconds % 60
     return if (h > 0) "%02d:%02d:%02d".format(h, m, s) else "%02d:%02d".format(m, s)
 }
 
-private fun formatDurationLabel(minutes: Int): String {
-    val h = minutes / 60
-    val m = minutes % 60
-    return when {
-        h > 0 && m > 0 -> "${h} ч ${m} мин"
-        h > 0 -> "${h} ч"
-        else -> "${m} мин"
-    }
+private fun fmtDurationLabel(minutes: Int): String {
+    val h = minutes / 60; val m = minutes % 60
+    return when { h > 0 && m > 0 -> "${h} ч ${m} мин"; h > 0 -> "${h} ч"; else -> "${m} мин" }
 }

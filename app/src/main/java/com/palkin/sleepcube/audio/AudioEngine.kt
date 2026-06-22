@@ -5,13 +5,15 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import kotlinx.coroutines.*
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.sin
 
 enum class SleepMode(val beatFreq: Float, val label: String) {
-    DEEP_SLEEP(2f, "Глубокий сон"),
-    NAP(10f, "Вздремнуть"),
+    SMART_SLEEP(10f, "Умный сон 60+"),
+    DEEP_SLEEP(2f,   "Глубокий сон"),
+    NAP(10f,         "Вздремнуть"),
     VIVID_DREAMS(6f, "Яркие сны"),
-    WAKE_UP(40f, "Пробуждение"),
+    WAKE_UP(40f,     "Пробуждение"),
 }
 
 /** Длительность сессии. null = бесконечно. */
@@ -36,18 +38,48 @@ class AudioEngine {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     @Volatile var beatFreq: Float = 2f
+    @Volatile var targetBeatFreq: Float = 2f
     @Volatile var mainVolume: Float = 0.5f
     @Volatile var noiseVolume: Float = 0.25f
 
+    // Текущая фаза — читается из UI
+    @Volatile var currentPhaseName: String = ""
+    @Volatile var currentStage: String = ""
+    @Volatile var currentCycle: Int = 0
+
     fun start(mode: SleepMode, noiseEnabled: Boolean) {
-        beatFreq = mode.beatFreq
+        val initial = if (mode == SleepMode.SMART_SLEEP) {
+            SleepProgram60.getPhaseAt(0f)
+        } else null
+
+        beatFreq = initial?.targetFreq ?: mode.beatFreq
+        targetBeatFreq = beatFreq
+        currentPhaseName = initial?.label ?: mode.label
+        currentStage = initial?.stage ?: ""
+        currentCycle = initial?.cycle ?: 0
+
         startBinaural()
         if (noiseEnabled) startPinkNoise()
+        startSmoothTransition()
+    }
+
+    /** Плавно сдвигает beatFreq к targetBeatFreq со скоростью 0.3 Гц/сек. */
+    private fun startSmoothTransition() {
+        scope.launch {
+            while (isActive) {
+                delay(100)
+                val target = targetBeatFreq
+                val current = beatFreq
+                val diff = target - current
+                if (abs(diff) > 0.01f) {
+                    beatFreq = current + diff.coerceIn(-0.03f, 0.03f)
+                }
+            }
+        }
     }
 
     private fun startBinaural() {
-        // Stereo: left=baseFreq, right=baseFreq+beatFreq
-        val bufBytes = framesPerBuffer * 2 * 2 // frames * channels * bytes
+        val bufBytes = framesPerBuffer * 2 * 2
         binauralTrack = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -76,7 +108,7 @@ class AudioEngine {
                 val vol = (mainVolume * Short.MAX_VALUE).toInt()
                 for (i in 0 until framesPerBuffer) {
                     val t = frame.toDouble() / sampleRate
-                    buf[i * 2] = (sin(2.0 * PI * baseFreq * t) * vol)
+                    buf[i * 2]     = (sin(2.0 * PI * baseFreq * t) * vol)
                         .toInt().coerceIn(-32768, 32767).toShort()
                     buf[i * 2 + 1] = (sin(2.0 * PI * (baseFreq + bf) * t) * vol)
                         .toInt().coerceIn(-32768, 32767).toShort()
@@ -115,7 +147,6 @@ class AudioEngine {
         scope.launch {
             val buf = ShortArray(2048)
             val rng = java.util.Random()
-            // Paul Kellet pink noise filter state
             var b0 = 0.0; var b1 = 0.0; var b2 = 0.0
             var b3 = 0.0; var b4 = 0.0; var b5 = 0.0; var b6 = 0.0
 
@@ -129,7 +160,7 @@ class AudioEngine {
                     b3 = 0.86650 * b3 + white * 0.3104856
                     b4 = 0.55000 * b4 + white * 0.5329522
                     b5 = -0.7616 * b5 - white * 0.0168980
-                    val pink = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362).coerceIn(-4.0, 4.0) / 4.0
+                    val pink = (b0+b1+b2+b3+b4+b5+b6+white*0.5362).coerceIn(-4.0,4.0)/4.0
                     b6 = white * 0.115926
                     buf[i] = (pink * vol).toInt().coerceIn(-32768, 32767).toShort()
                 }
